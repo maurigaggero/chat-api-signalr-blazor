@@ -1,0 +1,133 @@
+﻿@page "/chat/{salaid:int}/{participanteid:int}"
+
+@using ChatSignalRBlazor.Shared
+@using Microsoft.AspNetCore.SignalR.Client
+
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+
+<div class="row" style="position:sticky; top:0px; background-color: rgba(193,193,255,0.6); height:50px; padding-top:8px">
+    <div class="col-8">
+        <h1 style="font-size: 23px; font-weight:600">Sala: @salaid </h1>
+    </div>
+    <div class="col-auto">
+        <h1 style="font-size: 23px; font-weight:600">Participante: @participanteid</h1>
+    </div>
+
+    <div class="col-auto">
+        <input type="button" class="btn btn-danger btn-sm" style="border-radius:30px; font-size:12px" @onclick="NavegarIndex" value="Salir" />
+    </div>
+</div>
+
+
+<br />
+@if (mensajes == null)
+{
+    <p>Cargando mensajes...</p>
+}
+else
+{
+    @foreach (var mensaje in mensajes)
+    {
+
+        if (mensaje.ParticipanteId == participanteid)
+        {
+            <div class="container" style="margin-right:100px; max-width:250px">
+                <p style="line-height:100%; background-color:lightgreen; border-radius:10px; overflow-wrap:break-word">
+                    <b>Tú: </b>@mensaje.Contenido
+                    <br />
+                    <a href="/chat/borrar/@mensaje.SalaId/@mensaje.ParticipanteId/@mensaje.Id" style="color:darkred"><b> <font size="2">X Eliminar</font></b></a> <font size=1>@mensaje.Fecha_Hora</font>
+                </p>
+            </div>
+        }
+        else
+        {
+            <div class="container" style="margin-left:5px; max-width:250px">
+                <p style="line-height:100%; background-color:lightblue; border-radius:10px; overflow-wrap:break-word">
+                    <b>@mensaje.ParticipanteId: </b>@mensaje.Contenido
+                    <br />
+                    <font size=1>@mensaje.Fecha_Hora</font>
+                </p>
+            </div>
+        }
+    }
+}
+
+<div class="row" style="position:sticky; bottom:5px; background:inherit">
+    <form class="form-inline" style="margin-bottom:10px;">
+        <input type="text" for="Contenido" class="form-control" style="border-radius:30px; width:890px; margin-left:35px" @bind="@mensajeCrea.Contenido" placeholder="Escribe un mensaje" />
+
+        <input type="reset" class="btn btn-primary" style="border-radius:30px; margin-left: 15px" @onclick="@CreaMensaje" value="Enviar" />
+    </form>
+</div>
+
+
+
+@code {
+    Mensaje[] mensajes;
+    Mensaje mensajeCrea = new Mensaje();
+
+    private HubConnection hubConnection;
+
+    [Parameter]
+    public int salaid { get; set; }
+    [Parameter]
+    public int participanteid { get; set; }
+
+    private void NavegarIndex()
+    {
+        NavigationManager.NavigateTo("/");
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        hubConnection = new HubConnectionBuilder()
+        .WithUrl(NavigationManager.ToAbsoluteUri("/broadcastHub"))
+        .Build();
+
+        hubConnection.On("ReceiveMessage", () =>
+        {
+            CallLoadData();
+            StateHasChanged();
+        });
+
+        await hubConnection.StartAsync();
+
+        await LoadData();
+    }
+
+    private void CallLoadData()
+    {
+        Task.Run(async () =>
+        {
+            await LoadData();
+        });
+    }
+
+    protected async Task LoadData()
+    {
+        mensajes = await Http.GetFromJsonAsync<Mensaje[]>("api/mensajes/bysala/" + salaid);
+        StateHasChanged();
+    }
+
+    //public bool IsConnected =>
+    //    hubConnection.State == HubConnectionState.Connected;
+
+    public void Dispose()
+    {
+        _ = hubConnection.DisposeAsync();
+    }
+
+    protected async Task CreaMensaje()
+    {
+        mensajeCrea.ParticipanteId = participanteid;
+        mensajeCrea.SalaId = salaid;
+        mensajeCrea.Fecha_Hora = DateTime.Now;
+
+        await Http.PostAsJsonAsync("api/mensajes", mensajeCrea);
+        //if (IsConnected) await SendMessage();
+    }
+
+    //Task SendMessage() => hubConnection.SendAsync("SendMessage");
+}
